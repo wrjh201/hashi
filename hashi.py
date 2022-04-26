@@ -1,5 +1,5 @@
 import itertools as it
-from typing import Iterator
+from typing import Iterator, Optional
 
 
 Pos = tuple[int, int]
@@ -29,11 +29,44 @@ def lines_insersect(l1 : Line, l2: Line) -> bool:
         v2 = l2[0][0] <= l1[0][0] <= l2[1][0]
         return v1 and v2
 
+class NESW:
+
+    def __init__(self,
+                 north: int = 2,
+                 east: int = 2,
+                 south: int = 2,
+                 west: int = 2,
+                 ):
+        self.north = north
+        self.east = east
+        self.south = south
+        self.west = west
+
+    def __repr__(self) -> str:
+        return f"(n:{self.north}, e:{self.east}, s:{self.south}, w:{self.west})"
+
+    def intersect(self, other ):
+        self.north = min(self.north, other.north)
+        self.east = min(self.east, other.east)
+        self.south = min(self.south, other.south)
+        self.west = min(self.west, other.west)
+
+    def union(self, other):
+        self.north = max(self.north, other.north)
+        self.east = max(self.east, other.east)
+        self.south = max(self.south, other.south)
+        self.west = max(self.west, other.west)
+
+    def total(self):
+        return self.north + self.east + self.south + self.west
+                 
+
 
 class Hashi:
 
     def __init__(self) -> None:
         self.nodes: dict[Pos, int] = {}
+        self.nesw: dict[Pos, NESW] = {}
         self.bridges : dict[Line, int] = {}
 
     def connected_bridges(self, node: Pos) -> Iterator[tuple[Line, int]]:
@@ -41,27 +74,34 @@ class Hashi:
             if node in (p1, p2):
                 yield ((p1, p2), w)
 
-    def adjacent_nodes(self, node: Pos) -> Iterator[Pos]:
-        n_x = node[0]
-        n_y = node[1]
-        # +y direction
-        yplus = min(
-            filter(lambda n: n[1] > n_y and n[0] == n_x, self.nodes.keys()),
+    def north_adjacent(self, node: Pos) -> Optional[Pos]:
+        return min(
+            filter(lambda n: n[1] > node[1] and n[0] == node[0], self.nodes.keys()),
             key = lambda x: x[1],
             default=None)
-        # -y direction
-        yminus = max(
-            filter(lambda n: n[1] < n_y and n[0] == n_x, self.nodes.keys()),
+
+    def south_adjacent(self, node: Pos) -> Optional[Pos]:
+        return max(
+            filter(lambda n: n[1] < node[1] and n[0] == node[0], self.nodes.keys()),
             key = lambda x: x[1],
             default=None)
-        xplus = min(
-            filter(lambda n: n[0] > n_x and n[1] == n_y, self.nodes.keys()),
+
+    def east_adjacent(self, node: Pos) -> Optional[Pos]:
+        return min(
+            filter(lambda n: n[0] > node[0] and n[1] == node[1], self.nodes.keys()),
             key = lambda x: x[0],
             default= None)
-        xminus = max(
-            filter(lambda n: n[0] < n_x and n[1] == n_y, self.nodes.keys()),
+
+    def west_adjacent(self, node: Pos) -> Optional[Pos]:
+        return max(
+            filter(lambda n: n[0] < node[0] and n[1] == node[1], self.nodes.keys()),
             key = lambda x: x[0],
             default = None)
+    def adjacent_nodes(self, node: Pos) -> Iterator[Pos]:
+        yplus = self.north_adjacent(node)
+        yminus = self.south_adjacent(node)
+        xplus = self.east_adjacent(node)
+        xminus = self.west_adjacent(node)
         if yplus:
             yield yplus
         if yminus:
@@ -112,17 +152,39 @@ class Hashi:
         return True
 
     def solve_fill(self):
-        """Set all bridges to values that they must have at a minimum.
-        i.e for a 3 value bridge on a corner, set each of its bridges to be at least 1."""
-        for node, node_weight in self.nodes.items():
-            other_nodes = list(self.adjacent_nodes(node))
-            if len(other_nodes) == 2 and node_weight == 3:
-                for other_node in other_nodes:
-                    self.add_bridge(node, other_node, 1)
-            if len(other_nodes) == 3 and node_weight == 5:
-                for other_node in other_nodes:
-                    self.add_bridge(node, other_node, 1)
+        """Give each node a NESW instance."""
+        for node, weight in self.nodes.items():
+            temp = max(weight, 2)
+            nesw = NESW(temp, temp, temp, temp)
 
+            north = self.north_adjacent(node)
+            if north:
+                nesw.north = min(2, self.nodes[north])
+            else:
+                nesw.north = 0
+
+            east = self.east_adjacent(node)
+            if east:
+                nesw.east = min(2, self.nodes[east])
+            else:
+                nesw.east = 0
+
+            south = self.south_adjacent(node)
+            if south:
+                nesw.south = min(2, self.nodes[south])
+            else:
+                nesw.south = 0
+
+            west = self.west_adjacent(node)
+            if west:
+                nesw.west = min(2, self.nodes[west])
+            else:
+                nesw.west = 0
+            print(node, nesw)
+            self.nesw[node] = nesw
+
+            
+            
     def generate_dot(self, filename):
         with open(filename, "w") as f:
             f.write("graph {\n")
